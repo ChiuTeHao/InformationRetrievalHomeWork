@@ -386,35 +386,113 @@ void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,doubl
 }
 void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double> &pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
 {
-	map<string,double> denopzdw;
-	for(map<string,double>::iterator it=pwz.begin();it!=pwz.end();it++)
+	int frequencytotal[doccnt]={};
+	for(int i=0;i<doccnt;i++)
 	{
-		for(int i=0;i<doccnt;i++)
+		for(map<int,int>::iterator it=document[i].frequency.begin();it!=document[i].frequency.end();it++)
+		{
+			frequencytotal[i]+=it->second;
+		}
+	}
+	for(int t=0;t<10;t++)
+	{
+		printf("iteration %d\n",t);
+		map<string,double> denopzdw;
+		for(map<string,double>::iterator it=pwz.begin();it!=pwz.end();it++)
+		{
+			for(int i=0;i<doccnt;i++)
+			{
+				int wordindex=0,topicindex=0;
+				parsepwzString(wordindex,topicindex,it->first);
+				if(document[i].frequency.count(wordindex)!=0)
+				{
+					//printf("wordid:%d topicindex:%d docid:%d\n",wordindex,topicindex,i);
+					string pzdwindex=pzdwtoString(topicindex,i,wordindex);
+					pzdw[pzdwindex]=it->second*pzd[pzdtoString(topicindex,i)];
+					string denopzdwindex=pwztoString(wordindex,topicindex);
+					if(denopzdw.count(denopzdwindex)==0)
+						denopzdw[denopzdwindex]=pzdw[pzdwindex];
+					else
+						denopzdw[denopzdwindex]+=pzdw[pzdwindex];
+				}
+				else
+					continue;
+			}
+		}
+		for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
+		{
+			int topicindex=0,docindex=0,wordindex=0;
+			parsepzdwString(topicindex,docindex,wordindex,it->first);
+			it->second/=denopzdw[pwztoString(wordindex,topicindex)];
+		}
+		//map<string,double>tmppwz,tmppzd;
+		double topicsum[4]={};
+		map<string,double> tmppwz,tmppzd;
+		for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
+		{
+			string pzdwindex=it->first;
+			int wordindex=0,topicindex=0,docindex=0;
+			parsepzdwString(topicindex,docindex,wordindex,pzdwindex);
+			string pwzindex=pwztoString(wordindex,topicindex);
+			if(tmppwz.count(pwzindex)==0)
+				tmppwz[pwzindex]=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+			else
+				tmppwz[pwzindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+			topicsum[topicindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+		}
+		for(map<string,double>::iterator it=tmppwz.begin();it!=tmppwz.end();it++)
 		{
 			int wordindex=0,topicindex=0;
 			parsepwzString(wordindex,topicindex,it->first);
-			if(document[i].frequency.count(wordindex)!=0)
-			{
-				printf("wordid:%d topicindex:%d docid:%d\n",wordindex,topicindex,i);
-				string pzdwindex=pzdwtoString(topicindex,i,wordindex);
-				pzdw[pzdwindex]=it->second*pzd[pzdtoString(topicindex,i)];
-				string denopzdwindex=pwztoString(wordindex,topicindex);
-				if(denopzdw.count(denopzdwindex)==0)
-					denopzdw[denopzdwindex]=pzdw[pzdwindex];
-				else
-					denopzdw[denopzdwindex]+=pzdw[pzdwindex];
-			}
-			else
-				continue;
+			it->second/=topicsum[topicindex];
 		}
-	}
-	for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
-	{
-		int topicindex=0,docindex=0,wordindex=0;
-		parsepzdwString(topicindex,docindex,wordindex,it->first);
-		it->second/=denopzdw[pwztoString(wordindex,topicindex)];
+		for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
+		{
+			string pzdwindex=it->first;
+			int wordindex=0,topicindex=0,docindex=0;
+			parsepzdwString(topicindex,docindex,wordindex,pzdwindex);
+			string pzdindex=pzdtoString(topicindex,docindex);
+			if(tmppzd.count(pzdindex)==0)
+				tmppzd[pzdindex]=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+			else
+				tmppzd[pzdindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];	
+		}
+		for(map<string,double>::iterator it=tmppzd.begin();it!=tmppzd.end();it++)
+		{
+			string pzdindex=it->first;
+			int topicindex=0,docindex=0;
+			parsepzdString(topicindex,docindex,pzdindex);
+			it->second/=frequencytotal[docindex];
+		}
+		for(map<string,double>::iterator it=tmppwz.begin();it!=tmppwz.end();it++)
+			pwz[it->first]=it->second;
+		for(map<string,double>::iterator it=tmppzd.begin();it!=tmppzd.end();it++)
+			pzd[it->first]=it->second;
+		printf("pwz size:%d pzd size:%d pzdw size:%d\n",(int)pwz.size(),(int)pzd.size(),(int)pzdw.size());
 	}
 	return;
+}
+void similarity(Document &query,map<string,double> &pwz,map<string,double> &pzd,Document document[],int doccnt,int numofcluster)
+{
+	for(int i=0;i<doccnt;i++)
+	{
+		document[i].similarity=1;
+		for(map<int,int>::iterator it=query.frequency.begin();it!=query.frequency.end();it++)
+		{
+				int wordindex=it->first;
+				double sum=0;
+				for(int j=0;j<numofcluster;j++)
+				{
+					string pwzindex=pwztoString(wordindex,j),pzdindex=pzdtoString(j,i);
+					if(pwz.count(pwzindex)==0||pzd.count(pzdindex)==0)
+						continue;
+					else
+						sum+=pwz[pwzindex]*pzd[pzdindex];
+				}
+				for(int j=0;j<it->second;j++)
+					document[i].similarity*=sum;
+		}
+	}
 }
 int main()
 {
@@ -439,7 +517,7 @@ int main()
 	buildTopicDic(document,doccnt,topicdic,numofcluster);
 	Initialize(pzd,pwz,pzdw,topicdic,numofcluster,document,doccnt);
 	Training(pzd,pwz,pzdw,topicdic,numofcluster,document,doccnt);
-	/*FILE *ansptr=fopen("result.txt","w");
+	FILE *ansptr=fopen("result.txt","w");
 	DIR *querydir=opendir("./shortquery");
 	struct dirent *queryentry;
 	int querycnt=0;
@@ -457,6 +535,7 @@ int main()
 		char str[50]={'.','/','s','h','o','r','t','q','u','e','r','y','/'};
 		strcat(str,filename[t].c_str());
 		readQuery(str,query);
+		similarity(query,pwz,pzd,document,doccnt,numofcluster);
 		sort(document,document+doccnt);
 		querycnt++;
 		fprintf(ansptr,"Query %d %s %d\n",querycnt,filename[t].c_str(),doccnt);
@@ -472,6 +551,6 @@ int main()
 		query.weight.clear();
 		query.length=query.similarity=0;	
 	}
-	fclose(ansptr);*/
+	fclose(ansptr);
 	exit(0);
 }
