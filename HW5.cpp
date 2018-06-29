@@ -437,34 +437,18 @@ void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,doubl
 		for(int j=0;j<numofcluster;j++)
 			pzd[pzdtoString(j,document[i].filename)]=1.0/numofcluster;
 	}
-	FILE *fptr=fopen("topicdictionary.txt","w");
-	for(int i=0;i<numofcluster;i++)
-	{
-		map<string,double>::iterator it;
-		for(it=pwz.begin();it!=pwz.end();it++)
-		{
-			fprintf(fptr,"%s %f\n",it->first.c_str(),it->second);
-		}
-	}
-	fclose(fptr);
-	fptr=fopen("pzd.txt","w");
-	map<string,double>::iterator it;
-	for(it=pzd.begin();it!=pzd.end();it++)
-	{
-		fprintf(fptr,"%s %f\n",it->first.c_str(),it->second);
-	}
-	fclose(fptr);
 }
 void Training(map<string,double> pzd,map<string,double> pwz,map<string,double> pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
 {
 	map<string,double>::iterator it;
 	for(it=pwz.begin();it!=pwz.end();it++)
 	{
-		int wordindex,topicindex;
+		int wordindex=0,topicindex=0;
 		parsepwzString(wordindex,topicindex,it->first);
-		for(int i=0;i<1000;i++)
+		for(int i=0;i<doccnt;i++)
 		{
-			pzdw[pzdwtoString(topicindex,document[i].filename,wordindex)]=it->second*pzd[pzdtoString(topicindex,document[i].filename)];
+			if(document[i].frequency.count(wordindex)!=0)
+				pzdw[pzdwtoString(topicindex,document[i].filename,wordindex)]=it->second*pzd[pzdtoString(topicindex,document[i].filename)];
 		}
 	}
 }

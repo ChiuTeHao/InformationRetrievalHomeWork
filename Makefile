@@ -1,4 +1,4 @@
-CC=g++
+CC=g++ -std=c++11
 CFLAG=-Wall -g -o
 all:HW5 EvaluationProgram
 HW5:HW5.cpp
