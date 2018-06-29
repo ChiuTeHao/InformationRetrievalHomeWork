@@ -271,134 +271,80 @@ void kmeans(Document document[],int doccnt,int numofcluster)
 		else
 			sameresult=0;
 	}while(sameresult<10);
-	string name[4]={"cluster1.txt","cluster2.txt","cluster3.txt","cluster4.txt"};
-	for(int i=0;i<4;i++)
-	{
-		FILE *fptr=fopen(name[i].c_str(),"w");
-		for(int j=0;j<doccnt;j++)
-		{
-			if(document[j].clusterid==i)
-				fprintf(fptr,"%s\n",document[j].filename);
-		}
-		fclose(fptr);
-	}
 }
-void parsepzdString(int &topicid,char filename[],string str)
+string integertoString(int num)
 {
-	int ptr=0;
-	while(str[ptr]<'0'||str[ptr]>'9')
-		ptr++;
-	while(str[ptr]>='0'&&str[ptr]<='9')
-	{
-		topicid*=10;
-		topicid+=str[ptr]-'0';
-		ptr++;
-	}
-	while(str[ptr]!='|')
-		ptr++;
-	ptr++;
-	int cnt=0,stop=(int)str.size();
-	while(ptr<stop)
-	{
-		filename[cnt]=str[ptr];
-		cnt++;
-		ptr++;
-	}
-}
-string pzdtoString(int topic,char filename[])
-{
+	stack<int>s;
 	string str;
-	stack<int> s;
 	do
 	{
-		s.push(topic%10);
-		topic/=10;
-	}while(topic!=0);
+		s.push(num%10);
+		num/=10;
+	}while(num!=0);
 	while(!s.empty())
 	{
-		str+=(s.top()+'0');
+		str+=('0'+s.top());
 		s.pop();
 	}
+	return str;
+}
+int getInteger(string str,int &ptr)
+{
+	while(str[ptr]<'0'||str[ptr]>'9')
+		ptr++;
+	int x=0;
+	while(str[ptr]>='0'&&str[ptr]<='9')
+	{
+		x*=10;
+		x+=str[ptr]-'0';
+		ptr++;
+	}
+	return x;	
+}
+void parsepzdString(int &topicid,int &docid,string str)
+{
+	int ptr=0;
+	topicid=getInteger(str,ptr);
+	docid=getInteger(str,ptr);
+}
+string pzdtoString(int topic,int docid)
+{
+	string str;
+	str+=integertoString(topic);
 	str+="|";
-	str+=filename;
+	str+=integertoString(docid);
 	return str;
 }
 void parsepwzString(int &wordid,int &topicid,string str)
 {
 	int ptr=0;
-	while(str[ptr]<'0'||str[ptr]>'9')
-		ptr++;
-	while(str[ptr]>='0'&&str[ptr]<='9')
-	{
-		wordid*=10;
-		wordid+=str[ptr]-'0';
-		ptr++;
-	}
-	while(str[ptr]<'0'||str[ptr]>'9')
-		ptr++;
-	while(str[ptr]>='0'&&str[ptr]<='9')
-	{
-		topicid*=10;
-		topicid+=str[ptr]-'0';
-		ptr++;
-	}
+	wordid=getInteger(str,ptr);
+	topicid=getInteger(str,ptr);
 }
-string pwztoString(int a,int b)
+string pwztoString(int wordid,int topicid)
 {
-	stack<int> tmp;
 	string str;
-	do
-	{
-		tmp.push(a%10);
-		a/=10;
-	}while(a!=0);
-	while(!tmp.empty())
-	{
-		str+=(tmp.top()+'0');
-		tmp.pop();
-	}
+	str+=integertoString(wordid);
 	str+="|";
-	do
-	{
-		tmp.push(b%10);
-		b/=10;
-	}while(b!=0);
-	while(!tmp.empty())
-	{
-		str+=(tmp.top()+'0');
-		tmp.pop();
-	}
+	str+=integertoString(topicid);
 	return str;
 }
-string pzdwtoString(int topicindex,char filename[],int wordid)
+void parsepzdwString(int &topicindex,int &docid,int &wordid,string str)
 {
-	stack<int> tmp;
+	int ptr=0;
+	topicindex=getInteger(str,ptr);
+	docid=getInteger(str,ptr);
+	wordid=getInteger(str,ptr);
+}
+string pzdwtoString(int topicindex,int docid,int wordid)
+{
 	string str;
-	do
-	{
-		tmp.push(topicindex%10);
-		topicindex/=10;
-	}while(topicindex!=0);
-	while(!tmp.empty())
-	{
-		str+=(tmp.top()+'0');
-		tmp.pop();
-	}
+	str+=integertoString(topicindex);
 	str+="|";
-	str+=filename;
+	str+=integertoString(docid);
 	str+="|";
-	do
-	{
-		tmp.push(wordid%10);
-		wordid/=10;
-	}while(wordid!=0);
-	while(!tmp.empty())
-	{
-		str+=(tmp.top()+'0');
-		tmp.pop();
-	}
+	str+=integertoString(wordid);
 	return str;
-
 }
 void buildTopicDic(Document *document,int doccnt,map<int,int> topicdic[],int numofcluster)
 {
@@ -435,7 +381,7 @@ void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,doubl
 	for(int i=0;i<doccnt;i++)
 	{
 		for(int j=0;j<numofcluster;j++)
-			pzd[pzdtoString(j,document[i].filename)]=1.0/numofcluster;
+			pzd[pzdtoString(j,i)]=1.0/numofcluster;
 	}
 }
 void Training(map<string,double> pzd,map<string,double> pwz,map<string,double> pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
@@ -443,14 +389,20 @@ void Training(map<string,double> pzd,map<string,double> pwz,map<string,double> p
 	map<string,double>::iterator it;
 	for(it=pwz.begin();it!=pwz.end();it++)
 	{
-		int wordindex=0,topicindex=0;
-		parsepwzString(wordindex,topicindex,it->first);
 		for(int i=0;i<doccnt;i++)
 		{
+			int wordindex=0,topicindex=0;
+			parsepwzString(wordindex,topicindex,it->first);
 			if(document[i].frequency.count(wordindex)!=0)
-				pzdw[pzdwtoString(topicindex,document[i].filename,wordindex)]=it->second*pzd[pzdtoString(topicindex,document[i].filename)];
+				pzdw[pzdwtoString(topicindex,i,wordindex)]=it->second*pzd[pzdtoString(topicindex,i)];
+		}
+		for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
+		{
+			int wordindex=0,topicindex=0,docid=0;
+			parsepzdwString(topicindex,docid,wordindex,it->first);
 		}
 	}
+	return;
 }
 int main()
 {
