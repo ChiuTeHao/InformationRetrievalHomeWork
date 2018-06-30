@@ -14,112 +14,6 @@
 #include<string>
 using namespace std;
 const double eps=1e-5;
-struct ScienceNum
-{
-	double a;
-	int exp;
-	void printout()
-	{
-		printf("%f*10^ %d",a,exp);
-	}
-	ScienceNum(double num)
-	{
-		a=num;
-		exp=0;
-		if(num==0)
-			return;
-		normalized();
-	}
-	ScienceNum()
-	{
-		a=0;
-		exp=0;
-	}
-	void normalized()
-	{
-		if(a==0&&exp==0)
-			return;
-		while(abs(a)>10)
-		{
-			a/=10;
-			exp++;
-		}
-		while(abs(a)<1)
-		{
-			a*=10;
-			exp--;
-		}
-	}
-	ScienceNum & operator+=(const ScienceNum &rhs)
-	{
-		ScienceNum tmp=rhs;
-		while(exp<tmp.exp)
-		{
-			a/=10;
-			exp++;
-		}
-		while(exp>tmp.exp)
-		{
-			tmp.a/=10;
-			tmp.exp++;
-		}
-		a+=tmp.a;
-		normalized();
-		return *this;	
-	}
-	const ScienceNum operator+(const ScienceNum &rhs)const
-	{
-		ScienceNum tmp=*this;
-		tmp+=rhs;
-		return tmp;
-	}
-	ScienceNum & operator*=(ScienceNum &rhs)
-	{
-		a*=rhs.a;
-		exp+=rhs.exp;
-		while(abs(a)>10)
-		{
-			a/=10;
-			exp++;
-		}
-		while(abs(a)<1)
-		{
-			a*=10;
-			exp++;
-		}
-		normalized();
-		return *this;
-
-	}
-	const ScienceNum operator*(ScienceNum &rhs)const
-	{
-		ScienceNum tmp=(*this);
-		tmp*=rhs;
-		return tmp;
-	}
-
-};
-bool operator<(const ScienceNum &lhs,const ScienceNum &rhs)
-{
-	if(lhs.a*rhs.a<0)
-		return lhs.a<rhs.a;
-	else if(lhs.exp!=rhs.exp)
-		return lhs.exp<rhs.exp;
-	else
-		return lhs.a<rhs.a;
-}
-bool operator==(const ScienceNum &lhs,const ScienceNum &rhs)
-{
-	if(abs(lhs.a-rhs.a)>eps)
-		return false;
-	if(lhs.exp!=rhs.exp)
-		return false;
-	return true;
-}
-bool operator>(const ScienceNum &lhs,const ScienceNum &rhs)
-{
-	return !(lhs==rhs||lhs<rhs);
-}
 struct Document
 {
 	int clusterid;
@@ -128,7 +22,7 @@ struct Document
 	map<int,int> frequency;
 	map<int,double> weight;
 	double length=0;
-	ScienceNum similarity;
+	double similarity;
 	bool operator<(const Document &rhs)
 	{
 		return similarity>rhs.similarity;
@@ -602,59 +496,49 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 	fclose(fptr);
 	return;
 }
-void similarity(Document &query,map<string,double> &pwz,map<string,double> &pzd,Document document[],int doccnt,int numofcluster,FILE **p2fptr)
+void readBackGroundModel(map<int,double> &model)
+{
+	FILE *fptr=fopen("Word_Unigram_Xinhua98Upper.txt","r");
+	int id;
+	double prob,totalprob=0;
+	double delta=1e-11;
+	while(fscanf(fptr,"%d %lf",&id,&prob)==2)
+	{
+		model[id]=prob;
+		totalprob+=prob+delta;
+	}
+	for(map<int,double>::iterator it=model.begin();it!=model.end();it++)
+	{
+		model[it->first]=(it->second+delta)/totalprob;
+	}
+	fclose(fptr);
+}
+void calculateRank(Document &query,Document document[],int doccnt,map<int,double> &backgroundmodel,map<string,double> &pwz,map<string,double> &pzd,double alpha,double beta,int numofcluster)
 {
 	for(int i=0;i<doccnt;i++)
 	{
-		document[i].similarity.a=1;
-		document[i].similarity.exp=0;
+		int wordindex;
+		double prob=1;
 		for(map<int,int>::iterator it=query.frequency.begin();it!=query.frequency.end();it++)
 		{
-				int wordindex=it->first;
-				ScienceNum sum(0);
-				for(int j=0;j<numofcluster;j++)
-				{
-					printf("Document %d wordindex %d topindex %d\n",i,wordindex,j);
-					string pwzindex=pwztoString(wordindex,j),pzdindex=pzdtoString(j,i);
-					if(pwz.count(pwzindex)==0)
-					{
-						printf("in if section\n");
-						continue;
-					}
-					else if(pzd.count(pzdindex)==0)
-					{
-						printf("in else if section\n");
-						continue;
-					}
-					else
-					{
-						printf("in else section\n");
-						printf("pwz: %f pzd:%f\n",pwz[pwzindex],pzd[pzdindex]);
-						ScienceNum a(pwz[pwzindex]),b(pzd[pzdindex]);
-						printf("a: ");
-						a.printout();
-						printf(" b: ");
-						b.printout();
-						sum=sum+a*b;
-						printf(" sum: ");
-						sum.printout();
-						printf("\n");
-					}
-				}
-				if(sum.a==0&&sum.exp==0)
-				{
-					sum.a=1;
-					sum.exp=-9;
-				}
-				printf("finish calculate sum %f*10^%d\n",sum.a,sum.exp);
-				for(int j=0;j<it->second;j++)
-					document[i].similarity=document[i].similarity*sum;
-				printf("new similarity :");
-				document[i].similarity.printout();
-				printf("\n");
+			wordindex=it->first;
+			double plsaprob=0;
+			for(int j=0;j<numofcluster;j++)
+			{
+				string pwzindex=pwztoString(wordindex,j),pzdindex=pzdtoString(j,i);
+				if(pwz.count(pwzindex)!=0&&pzd.count(pzdindex)!=0)
+					plsaprob=pwz[pwzindex]*pzd[pzdindex];
+			}
+			if(query.frequency.count(wordindex)==0)
+			{
+				prob*=(beta*backgroundmodel[wordindex]+(1-alpha-beta)*plsaprob);
+			}
+			else
+			{
+				prob*=((alpha*document[i].frequency[wordindex]/document[i].length)+(beta)*backgroundmodel[wordindex]+(1-alpha-beta)*plsaprob);
+			}
 		}
-		fprintf(*p2fptr,"docindex : %d similarity : %f*10^%d\n",i,document[i].similarity.a,document[i].similarity.exp);
-		fprintf(*p2fptr,"===========================================\n");
+		document[i].similarity=prob;
 	}
 }
 int main()
@@ -680,6 +564,8 @@ int main()
 	buildTopicDic(document,doccnt,topicdic,numofcluster);
 	Initialize(pzd,pwz,pzdw,topicdic,numofcluster,document,doccnt);
 	Training(pzd,pwz,pzdw,topicdic,numofcluster,document,doccnt);
+	map<int,double> backgroundmodel;
+	readBackGroundModel(backgroundmodel);
 	FILE *ansptr=fopen("result.txt","w");
 	DIR *querydir=opendir("./shortquery");
 	struct dirent *queryentry;
@@ -698,26 +584,18 @@ int main()
 		char str[50]={'.','/','s','h','o','r','t','q','u','e','r','y','/'};
 		strcat(str,filename[t].c_str());
 		readQuery(str,query);
-		string file="Query"+integertoString(t)+".txt";
-		FILE *fptr=fopen(file.c_str(),"w");
-		printf("Query %d\n",t);
-		similarity(query,pwz,pzd,document,doccnt,numofcluster,&fptr);
-		fclose(fptr);
+		calculateRank(query,document,doccnt,backgroundmodel,pwz,pzd,0.2,0.4,numofcluster);
 		sort(document,document+doccnt);
 		querycnt++;
 		fprintf(ansptr,"Query %d %s %d\n",querycnt,filename[t].c_str(),doccnt);
 		for(int i=0;i<doccnt;i++)
 		{
-			fprintf(ansptr,"%s %f*%d\n",document[i].filename,document[i].similarity.a,document[i].similarity.exp);
-			/*if(document[i].similarity>1)
-			{
-				Print(queryentry->d_name,document[i],query);
-			}*/
+			fprintf(ansptr,"%s %f\n",document[i].filename,document[i].similarity);
 		}
 		query.frequency.clear();
 		query.weight.clear();
 		query.length=0;
-		query.similarity=ScienceNum(1);	
+		query.similarity=0;	
 	}
 	fclose(ansptr);
 	exit(0);
