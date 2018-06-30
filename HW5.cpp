@@ -18,60 +18,108 @@ struct ScienceNum
 {
 	double a;
 	int exp;
+	void printout()
+	{
+		printf("%f*10^ %d",a,exp);
+	}
 	ScienceNum(double num)
 	{
+		a=num;
+		exp=0;
 		if(num==0)
-			a=exp=0;
-		else
-		{
-			exp=0;
-			if(abs(num)>10)
-			{
-				num/=10;
-				exp++;
-			}
-			else if(abs(num)<1)
-			{
-				num*=10;
-				exp--;
-			}
-			a=num;			
-		}
+			return;
+		normalized();
 	}
-	bool operator<(const ScienceNum &lhs,const ScienceNum &rhs)
+	ScienceNum()
 	{
-		if(lhs.a*rhs.a<0)
-			return lhs.a<rhs.a;
-		else if(lhs.exp!=rhs.exp)
-			return lhs.exp<rhs.exp;
-		else
-			return lhs.a<rhs.a;
+		a=0;
+		exp=0;
+	}
+	void normalized()
+	{
+		if(a==0&&exp==0)
+			return;
+		while(abs(a)>10)
+		{
+			a/=10;
+			exp++;
+		}
+		while(abs(a)<1)
+		{
+			a*=10;
+			exp--;
+		}
 	}
 	ScienceNum & operator+=(const ScienceNum &rhs)
 	{
-		
+		ScienceNum tmp=rhs;
+		while(exp<tmp.exp)
+		{
+			a/=10;
+			exp++;
+		}
+		while(exp>tmp.exp)
+		{
+			tmp.a/=10;
+			tmp.exp++;
+		}
+		a+=tmp.a;
+		normalized();
+		return *this;	
 	}
 	const ScienceNum operator+(const ScienceNum &rhs)const
 	{
+		ScienceNum tmp=*this;
+		tmp+=rhs;
+		return tmp;
 	}
-}
-ScienceNum operator*(ScienceNum &lhs,ScienceNum &rhs)
-{
-	ScienceNum tmp(0);
-	tmp.a=lhs.a*rhs.a;
-	tmp.exp=rhs.b+lhs.b;
-	while(abs(tmp.a)>10)
+	ScienceNum & operator*=(ScienceNum &rhs)
 	{
-		tmp.a/=10;
-		tmp.exp++;
+		a*=rhs.a;
+		exp+=rhs.exp;
+		while(abs(a)>10)
+		{
+			a/=10;
+			exp++;
+		}
+		while(abs(a)<1)
+		{
+			a*=10;
+			exp++;
+		}
+		normalized();
+		return *this;
+
 	}
-	while(abs(tmp.a)<1)
+	const ScienceNum operator*(ScienceNum &rhs)const
 	{
-		tmp.a*=10;
-		tmp.exp++;
+		ScienceNum tmp=(*this);
+		tmp*=rhs;
+		return tmp;
 	}
-	return tmp;
+
 };
+bool operator<(const ScienceNum &lhs,const ScienceNum &rhs)
+{
+	if(lhs.a*rhs.a<0)
+		return lhs.a<rhs.a;
+	else if(lhs.exp!=rhs.exp)
+		return lhs.exp<rhs.exp;
+	else
+		return lhs.a<rhs.a;
+}
+bool operator==(const ScienceNum &lhs,const ScienceNum &rhs)
+{
+	if(abs(lhs.a-rhs.a)>eps)
+		return false;
+	if(lhs.exp!=rhs.exp)
+		return false;
+	return true;
+}
+bool operator>(const ScienceNum &lhs,const ScienceNum &rhs)
+{
+	return !(lhs==rhs||lhs<rhs);
+}
 struct Document
 {
 	int clusterid;
@@ -95,7 +143,6 @@ struct Document
 	}
 	Document()
 	{
-		similarity=ScienceNum(0);
 	}
 };
 struct Center
@@ -427,19 +474,6 @@ void buildTopicDic(Document *document,int doccnt,map<int,int> topicdic[],int num
 		}
 	}
 }
-void Normalized(map<string,double> &M)
-{
-	double sum=0,avg=0,dev=0;
-	for(map<string,double>::iterator it=M.begin();it!=M.end();it++)
-		sum+=it->second;
-	avg=sum/((int)M.size());
-	for(map<string,double>::iterator it=M.begin();it!=M.end();it++)
-		dev+=(it->second-avg)*(it->second-avg);
-	dev=sqrt(dev/(int)M.size());
-	printf("%f %f\n",avg,dev);
-	for(map<string,double>::iterator it=M.begin();it!=M.end();it++)
-		it->second=(it->second-avg)/dev;
-}
 void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,double> &pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
 {
 	pzd.clear();
@@ -459,7 +493,6 @@ void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,doubl
 		for(int j=0;j<numofcluster;j++)
 			pzd[pzdtoString(j,i)]=1.0/numofcluster;
 	}
-	//Normalized(pwz);
 }
 void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double> &pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
 {
@@ -471,7 +504,7 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 			frequencytotal[i]+=it->second;
 		}
 	}
-	for(int t=0;t<1;t++)
+	for(int t=0;t<10;t++)
 	{
 		printf("iteration %d\n",t);
 		map<string,double> denopzdw;
@@ -488,7 +521,7 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 					pzdw[pzdwindex]=it->second*pzd[pzdtoString(topicindex,i)];
 					string denopzdwindex=pwztoString(wordindex,topicindex);
 					if(denopzdw.count(denopzdwindex)==0)
-						denopzdw[denopzdwindex]=pzdw[pzdwindex];
+					denopzdw[denopzdwindex]=pzdw[pzdwindex];
 					else
 						denopzdw[denopzdwindex]+=pzdw[pzdwindex];
 				}
@@ -502,22 +535,22 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 			parsepzdwString(topicindex,docindex,wordindex,it->first);
 			it->second/=denopzdw[pwztoString(wordindex,topicindex)];
 		}
-		//map<string,double>tmppwz,tmppzd;
 		double topicsum[4]={};
-		map<string,double> tmppwz,tmppzd;
+		pwz.clear();
+		pzd.clear();
 		for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
 		{
 			string pzdwindex=it->first;
 			int wordindex=0,topicindex=0,docindex=0;
 			parsepzdwString(topicindex,docindex,wordindex,pzdwindex);
 			string pwzindex=pwztoString(wordindex,topicindex);
-			if(tmppwz.count(pwzindex)==0)
-				tmppwz[pwzindex]=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+			if(pwz.count(pwzindex)==0)
+				pwz[pwzindex]=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
 			else
-				tmppwz[pwzindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+				pwz[pwzindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
 			topicsum[topicindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
 		}
-		for(map<string,double>::iterator it=tmppwz.begin();it!=tmppwz.end();it++)
+		for(map<string,double>::iterator it=pwz.begin();it!=pwz.end();it++)
 		{
 			int wordindex=0,topicindex=0;
 			parsepwzString(wordindex,topicindex,it->first);
@@ -529,22 +562,18 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 			int wordindex=0,topicindex=0,docindex=0;
 			parsepzdwString(topicindex,docindex,wordindex,pzdwindex);
 			string pzdindex=pzdtoString(topicindex,docindex);
-			if(tmppzd.count(pzdindex)==0)
-				tmppzd[pzdindex]=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
+			if(pzd.count(pzdindex)==0)
+				pzd[pzdindex]=document[docindex].frequency[wordindex]*pzdw[pzdwindex];
 			else
-				tmppzd[pzdindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];	
+				pzd[pzdindex]+=document[docindex].frequency[wordindex]*pzdw[pzdwindex];	
 		}
-		for(map<string,double>::iterator it=tmppzd.begin();it!=tmppzd.end();it++)
+		for(map<string,double>::iterator it=pzd.begin();it!=pzd.end();it++)
 		{
 			string pzdindex=it->first;
 			int topicindex=0,docindex=0;
 			parsepzdString(topicindex,docindex,pzdindex);
 			it->second/=frequencytotal[docindex];
 		}
-		for(map<string,double>::iterator it=tmppwz.begin();it!=tmppwz.end();it++)
-			pwz[it->first]=it->second;
-		for(map<string,double>::iterator it=tmppzd.begin();it!=tmppzd.end();it++)
-			pzd[it->first]=it->second;
 		printf("pwz size:%d pzd size:%d pzdw size:%d\n",(int)pwz.size(),(int)pzd.size(),(int)pzdw.size());
 	}
 	FILE *fptr=fopen("pwz.txt","w");
@@ -577,33 +606,55 @@ void similarity(Document &query,map<string,double> &pwz,map<string,double> &pzd,
 {
 	for(int i=0;i<doccnt;i++)
 	{
-		document[i].similarity=1;
+		document[i].similarity.a=1;
+		document[i].similarity.exp=0;
 		for(map<int,int>::iterator it=query.frequency.begin();it!=query.frequency.end();it++)
 		{
 				int wordindex=it->first;
 				ScienceNum sum(0);
 				for(int j=0;j<numofcluster;j++)
 				{
+					printf("Document %d wordindex %d topindex %d\n",i,wordindex,j);
 					string pwzindex=pwztoString(wordindex,j),pzdindex=pzdtoString(j,i);
-					if(pwz.count(pwzindex)==0||pzd.count(pzdindex)==0)
+					if(pwz.count(pwzindex)==0)
+					{
+						printf("in if section\n");
 						continue;
+					}
+					else if(pzd.count(pzdindex)==0)
+					{
+						printf("in else if section\n");
+						continue;
+					}
 					else
 					{
+						printf("in else section\n");
+						printf("pwz: %f pzd:%f\n",pwz[pwzindex],pzd[pzdindex]);
 						ScienceNum a(pwz[pwzindex]),b(pzd[pzdindex]);
+						printf("a: ");
+						a.printout();
+						printf(" b: ");
+						b.printout();
 						sum=sum+a*b;
-					
+						printf(" sum: ");
+						sum.printout();
+						printf("\n");
 					}
 				}
-				fprintf(*p2fptr,"wordindex : %d sum : %f*%d\n",wordindex,sum.a,sum.exp);
-				for(int j=0;j<it->second;j++)
+				if(sum.a==0&&sum.exp==0)
 				{
-					document[i].similarity=document[i].similarity*sum;
-					/*if(sum>1e-9)
-						document[i].similarity*=sum;
-					else
-						document[i].similarity*=(1e-9);*/
+					sum.a=1;
+					sum.exp=-9;
 				}
+				printf("finish calculate sum %f*10^%d\n",sum.a,sum.exp);
+				for(int j=0;j<it->second;j++)
+					document[i].similarity=document[i].similarity*sum;
+				printf("new similarity :");
+				document[i].similarity.printout();
+				printf("\n");
 		}
+		fprintf(*p2fptr,"docindex : %d similarity : %f*10^%d\n",i,document[i].similarity.a,document[i].similarity.exp);
+		fprintf(*p2fptr,"===========================================\n");
 	}
 }
 int main()
@@ -666,7 +717,7 @@ int main()
 		query.frequency.clear();
 		query.weight.clear();
 		query.length=0;
-		query.similarity=ScienceNum(0);	
+		query.similarity=ScienceNum(1);	
 	}
 	fclose(ansptr);
 	exit(0);
