@@ -14,6 +14,64 @@
 #include<string>
 using namespace std;
 const double eps=1e-5;
+struct ScienceNum
+{
+	double a;
+	int exp;
+	ScienceNum(double num)
+	{
+		if(num==0)
+			a=exp=0;
+		else
+		{
+			exp=0;
+			if(abs(num)>10)
+			{
+				num/=10;
+				exp++;
+			}
+			else if(abs(num)<1)
+			{
+				num*=10;
+				exp--;
+			}
+			a=num;			
+		}
+	}
+	bool operator<(const ScienceNum &lhs,const ScienceNum &rhs)
+	{
+		if(lhs.a*rhs.a<0)
+			return lhs.a<rhs.a;
+		else if(lhs.exp!=rhs.exp)
+			return lhs.exp<rhs.exp;
+		else
+			return lhs.a<rhs.a;
+	}
+	ScienceNum & operator+=(const ScienceNum &rhs)
+	{
+		
+	}
+	const ScienceNum operator+(const ScienceNum &rhs)const
+	{
+	}
+}
+ScienceNum operator*(ScienceNum &lhs,ScienceNum &rhs)
+{
+	ScienceNum tmp(0);
+	tmp.a=lhs.a*rhs.a;
+	tmp.exp=rhs.b+lhs.b;
+	while(abs(tmp.a)>10)
+	{
+		tmp.a/=10;
+		tmp.exp++;
+	}
+	while(abs(tmp.a)<1)
+	{
+		tmp.a*=10;
+		tmp.exp++;
+	}
+	return tmp;
+};
 struct Document
 {
 	int clusterid;
@@ -21,7 +79,8 @@ struct Document
 	char filename[50];
 	map<int,int> frequency;
 	map<int,double> weight;
-	double length=0,similarity=0;
+	double length=0;
+	ScienceNum similarity;
 	bool operator<(const Document &rhs)
 	{
 		return similarity>rhs.similarity;
@@ -33,6 +92,10 @@ struct Document
 		for(it=frequency.begin();it!=frequency.end();it++)
 			length+=it->second*it->second;
 		return sqrt(length);
+	}
+	Document()
+	{
+		similarity=ScienceNum(0);
 	}
 };
 struct Center
@@ -364,6 +427,19 @@ void buildTopicDic(Document *document,int doccnt,map<int,int> topicdic[],int num
 		}
 	}
 }
+void Normalized(map<string,double> &M)
+{
+	double sum=0,avg=0,dev=0;
+	for(map<string,double>::iterator it=M.begin();it!=M.end();it++)
+		sum+=it->second;
+	avg=sum/((int)M.size());
+	for(map<string,double>::iterator it=M.begin();it!=M.end();it++)
+		dev+=(it->second-avg)*(it->second-avg);
+	dev=sqrt(dev/(int)M.size());
+	printf("%f %f\n",avg,dev);
+	for(map<string,double>::iterator it=M.begin();it!=M.end();it++)
+		it->second=(it->second-avg)/dev;
+}
 void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,double> &pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
 {
 	pzd.clear();
@@ -383,6 +459,7 @@ void Initialize(map<string,double> &pzd,map<string,double> &pwz,map<string,doubl
 		for(int j=0;j<numofcluster;j++)
 			pzd[pzdtoString(j,i)]=1.0/numofcluster;
 	}
+	//Normalized(pwz);
 }
 void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double> &pzdw,map<int,int> topicdic[],int numofcluster,Document *document,int doccnt)
 {
@@ -394,7 +471,7 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 			frequencytotal[i]+=it->second;
 		}
 	}
-	for(int t=0;t<10;t++)
+	for(int t=0;t<1;t++)
 	{
 		printf("iteration %d\n",t);
 		map<string,double> denopzdw;
@@ -470,9 +547,33 @@ void Training(map<string,double> &pzd,map<string,double> &pwz,map<string,double>
 			pzd[it->first]=it->second;
 		printf("pwz size:%d pzd size:%d pzdw size:%d\n",(int)pwz.size(),(int)pzd.size(),(int)pzdw.size());
 	}
+	FILE *fptr=fopen("pwz.txt","w");
+	for(map<string,double>::iterator it=pwz.begin();it!=pwz.end();it++)
+	{
+		int wordindex=0,topicindex=0;
+		parsepwzString(wordindex,topicindex,it->first);
+		fprintf(fptr,"wordindex : %d topicindex : %d %f\n",wordindex,topicindex,it->second);
+	}
+	fclose(fptr);
+	fptr=fopen("pzd.txt","w");
+	for(map<string,double>::iterator it=pzd.begin();it!=pzd.end();it++)
+	{
+		int topicindex=0,docindex=0;
+		parsepzdString(topicindex,docindex,it->first);
+		fprintf(fptr,"topicindex : %d docindex: %d %f\n",topicindex,docindex,it->second);
+	}
+	fclose(fptr);
+	fptr=fopen("pzdw.txt","w");
+	for(map<string,double>::iterator it=pzdw.begin();it!=pzdw.end();it++)
+	{
+		int wordindex=0,topicindex=0,docindex=0;
+		parsepzdwString(topicindex,docindex,wordindex,it->first);
+		fprintf(fptr,"topicindex : %d docindex : %d wordindex : %d %f\n",topicindex,docindex,wordindex,it->second);
+	}
+	fclose(fptr);
 	return;
 }
-void similarity(Document &query,map<string,double> &pwz,map<string,double> &pzd,Document document[],int doccnt,int numofcluster)
+void similarity(Document &query,map<string,double> &pwz,map<string,double> &pzd,Document document[],int doccnt,int numofcluster,FILE **p2fptr)
 {
 	for(int i=0;i<doccnt;i++)
 	{
@@ -480,17 +581,28 @@ void similarity(Document &query,map<string,double> &pwz,map<string,double> &pzd,
 		for(map<int,int>::iterator it=query.frequency.begin();it!=query.frequency.end();it++)
 		{
 				int wordindex=it->first;
-				double sum=0;
+				ScienceNum sum(0);
 				for(int j=0;j<numofcluster;j++)
 				{
 					string pwzindex=pwztoString(wordindex,j),pzdindex=pzdtoString(j,i);
 					if(pwz.count(pwzindex)==0||pzd.count(pzdindex)==0)
 						continue;
 					else
-						sum+=pwz[pwzindex]*pzd[pzdindex];
+					{
+						ScienceNum a(pwz[pwzindex]),b(pzd[pzdindex]);
+						sum=sum+a*b;
+					
+					}
 				}
+				fprintf(*p2fptr,"wordindex : %d sum : %f*%d\n",wordindex,sum.a,sum.exp);
 				for(int j=0;j<it->second;j++)
-					document[i].similarity*=sum;
+				{
+					document[i].similarity=document[i].similarity*sum;
+					/*if(sum>1e-9)
+						document[i].similarity*=sum;
+					else
+						document[i].similarity*=(1e-9);*/
+				}
 		}
 	}
 }
@@ -535,21 +647,26 @@ int main()
 		char str[50]={'.','/','s','h','o','r','t','q','u','e','r','y','/'};
 		strcat(str,filename[t].c_str());
 		readQuery(str,query);
-		similarity(query,pwz,pzd,document,doccnt,numofcluster);
+		string file="Query"+integertoString(t)+".txt";
+		FILE *fptr=fopen(file.c_str(),"w");
+		printf("Query %d\n",t);
+		similarity(query,pwz,pzd,document,doccnt,numofcluster,&fptr);
+		fclose(fptr);
 		sort(document,document+doccnt);
 		querycnt++;
 		fprintf(ansptr,"Query %d %s %d\n",querycnt,filename[t].c_str(),doccnt);
 		for(int i=0;i<doccnt;i++)
 		{
-			fprintf(ansptr,"%s %f\n",document[i].filename,document[i].similarity);
-			if(document[i].similarity>1)
+			fprintf(ansptr,"%s %f*%d\n",document[i].filename,document[i].similarity.a,document[i].similarity.exp);
+			/*if(document[i].similarity>1)
 			{
 				Print(queryentry->d_name,document[i],query);
-			}
+			}*/
 		}
 		query.frequency.clear();
 		query.weight.clear();
-		query.length=query.similarity=0;	
+		query.length=0;
+		query.similarity=ScienceNum(0);	
 	}
 	fclose(ansptr);
 	exit(0);
