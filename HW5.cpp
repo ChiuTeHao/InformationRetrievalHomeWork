@@ -584,7 +584,7 @@ int main()
 		char str[50]={'.','/','s','h','o','r','t','q','u','e','r','y','/'};
 		strcat(str,filename[t].c_str());
 		readQuery(str,query);
-		calculateRank(query,document,doccnt,backgroundmodel,pwz,pzd,0.2,0.4,numofcluster);
+		calculateRank(query,document,doccnt,backgroundmodel,pwz,pzd,0.7,0.25,numofcluster);
 		sort(document,document+doccnt);
 		querycnt++;
 		fprintf(ansptr,"Query %d %s %d\n",querycnt,filename[t].c_str(),doccnt);
